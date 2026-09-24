@@ -27,11 +27,25 @@ Use [VS Code](https://github.com/microsoft/vscode) as a design template while pr
 
 ## Building the project
 
-1. `git clone https://github.com/thebaselab/codeapp`
+1. `git clone https://github.com/hazerbvisor/codeapp-Plus`
 2. `./downloadFrameworks.sh`
-3. Open Code.xcodeproj
-4. Switch to CodeUI target if you wish to run the app on a simulator
-5. Click build
+3. `./checkBuildInputs.sh` (checks downloaded files before building)
+4. Open Code.xcodeproj in Xcode on macOS
+5. Select the **Code App** scheme for a device, or **Code UI** for a simulator
+6. Build with code signing configured for your developer account
+
+For a command-line device build on macOS, use:
+
+```sh
+xcodebuild -project Code.xcodeproj -scheme 'Code App' -configuration Debug \
+  -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+```
+
+The framework downloader retains archives under the ignored `Resources/.downloads`
+directory so interrupted runs can be resumed without discarding earlier downloads.
+`checkBuildInputs.sh` reports absent framework files; it does not compile the app.
+This repository currently has an Xcode project, not an XTool Mobile build
+configuration. Building directly on iPad requires a separate XTool integration.
 
 The source code of the built-in languages are hosted on these repositories.
 | Language | Repository |
