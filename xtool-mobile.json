@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "name": "CodeAppPlus",
+  "bundleIdentifier": "com.hazerbvisor.codeappplus",
+  "deploymentTarget": "16.0",
+  "executableTarget": "CodeAppPlus",
+  "targets": [
+    {
+      "name": "CodeAppPlus",
+      "sources": [
+        "CodeApp",
+        "Extensions"
+      ],
+      "headerSearchPaths": [
+        "CodeApp/Utilities"
+      ],
+      "swiftFlags": [
+        "-import-objc-header",
+        "${PROJECT}/CodeApp/Utilities/Code-Bridging-Header.h"
+      ],
+      "parseAsLibrary": true
+    }
+  ],
+  "frameworks": [
+    "AVFoundation",
+    "AVKit",
+    "CoreServices",
+    "CoreSpotlight",
+    "Foundation",
+    "GameController",
+    "JavaScriptCore",
+    "LocalAuthentication",
+    "MessageUI",
+    "MobileCoreServices",
+    "NaturalLanguage",
+    "PDFKit",
+    "SafariServices",
+    "Security",
+    "StoreKit",
+    "SwiftUI",
+    "UIKit",
+    "UniformTypeIdentifiers",
+    "WebKit"
+  ],
+  "resources": [
+    { "path": "Themes", "destination": "Themes" },
+    { "path": "Fonts/FiraCode-Regular.ttf", "destination": "FiraCode-Regular.ttf" },
+    { "path": "cacert.pem", "destination": "cacert.pem" },
+    { "path": "Dependencies/npm.bundle", "destination": "npm.bundle" },
+    { "path": "Dependencies/terminal.bundle", "destination": "terminal.bundle" },
+    { "path": "LanguageResources/ClangLib", "destination": "ClangLib" },
+    { "path": "LanguageResources/Library", "destination": "Library" },
+    { "path": "CodeApp/Settings.bundle", "destination": "Settings.bundle" },
+    { "path": "Resources/monaco-textmate.bundle", "destination": "monaco-textmate.bundle" }
+  ],
+  "infoPlist": "XToolMobileInfo.plist",
+  "shortVersion": "1.12.3",
+  "buildVersion": "87"
+}
