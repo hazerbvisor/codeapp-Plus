@@ -107,5 +107,37 @@ struct EditorTab: View {
             }
             .cornerRadius(10, corners: [.topLeft, .topRight])
         }
+        .contextMenu {
+            Button {
+                onCloseEditor()
+            } label: {
+                Label("Close", systemImage: "xmark")
+            }
+
+            if App.editors.count > 1 {
+                Button {
+                    App.closeOtherEditors(keeping: currentEditor)
+                } label: {
+                    Label("Close Others", systemImage: "xmark.circle")
+                }
+            }
+
+            if !App.editorsToRight(of: currentEditor).isEmpty {
+                Button {
+                    App.closeEditorsToRight(of: currentEditor)
+                } label: {
+                    Label("Close to the Right", systemImage: "arrow.right.to.line")
+                }
+            }
+
+            if !App.editors.isEmpty {
+                Divider()
+                Button(role: .destructive) {
+                    App.closeEditorsRespectingUnsaved(App.editors)
+                } label: {
+                    Label("Close All", systemImage: "xmark.rectangle.stack")
+                }
+            }
+        }
     }
 }
