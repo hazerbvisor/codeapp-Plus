@@ -24,7 +24,7 @@ The MIT license notice is preserved verbatim in the root `LICENSE` file and is a
 | PHP | PHP License 3.01; bundled third-party libraries retain their own licenses | https://github.com/php/php-src |
 | ios_system | BSD-3-Clause | https://github.com/holzschu/ios_system |
 | libssh2 | BSD-style license | https://github.com/libssh2/libssh2 |
-| OpenSSL | Apache-2.0 for current OpenSSL releases; consult the bundled release for its authoritative notice | https://github.com/openssl/openssl |
+| OpenSSL | License depends on the exact bundled OpenSSL release; preserve and consult the license shipped in that archive | https://github.com/openssl/openssl |
 | libgit2 | GPL-2.0 with a linking exception | https://github.com/libgit2/libgit2 |
 | NMSSH | MIT | https://github.com/NMSSH/NMSSH |
 
