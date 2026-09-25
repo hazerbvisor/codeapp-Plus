@@ -22,6 +22,10 @@ struct EditorTab: View {
         App.editors.firstIndex { $0 == currentEditor } ?? 0
     }
 
+    private var editorURL: URL? {
+        (currentEditor as? EditorInstanceWithURL)?.url
+    }
+
     static private func keyForInt(int: Int) -> KeyEquivalent {
         if int < 10 {
             return KeyEquivalent.init(String(int).first!)
@@ -29,16 +33,31 @@ struct EditorTab: View {
         return KeyEquivalent.init("0")
     }
 
+    private func openInFilesApp() {
+        guard let editorURL else { return }
+        openSharedFilesApp(
+            urlString: editorURL.deletingLastPathComponent().absoluteString
+        )
+    }
+
+    private func copyRelativePath() {
+        guard let editorURL else { return }
+        guard let baseURL = URL(string: App.workSpaceStorage.currentDirectory.url) else {
+            return
+        }
+        UIPasteboard.general.string = editorURL.relativePath(from: baseURL)
+        App.notificationManager.showInformationMessage("Relative path copied")
+    }
+
     var body: some View {
         Group {
-            HStack(spacing: 4) {
-                // TODO: File Icons for extensions
+            HStack(spacing: 5) {
                 FileIcon(url: currentEditor.title, iconSize: 12)
                 Button(action: {
                     onOpenEditor()
                 }) {
                     Group {
-                        if let editorURL = (currentEditor as? EditorInstanceWithURL)?.url,
+                        if let editorURL = editorURL,
                             let status = App.gitTracks[editorURL]
                         {
                             FileDisplayName(
@@ -56,11 +75,12 @@ struct EditorTab: View {
                         }
                     }
                     .lineLimit(1)
-                    .font(.system(size: 13, weight: .light))
+                    .font(.system(size: 13, weight: isActive ? .medium : .regular))
                     .foregroundColor(
                         Color.init(id: isActive ? "tab.activeForeground" : "tab.inactiveForeground")
                     )
-                }.keyboardShortcut(EditorTab.keyForInt(int: index + 1), modifiers: .command)
+                }
+                .keyboardShortcut(EditorTab.keyForInt(int: index + 1), modifiers: .command)
 
                 Group {
                     if let textEditor = currentEditor as? TextEditorInstance,
@@ -74,38 +94,40 @@ struct EditorTab: View {
                                 )
                             )
                             .frame(width: 18, height: 18)
-                            .contentShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                             .hoverEffect(.highlight)
-                            .if(isActive) {
-                                $0.onTapGesture {
-                                    onCloseEditor()
-                                }
-                            }
                     } else if isActive {
                         Image(systemName: "xmark")
-                            .font(.system(size: 8))
+                            .font(.system(size: 8, weight: .semibold))
                             .foregroundColor(
                                 Color.init(
                                     id: isActive ? "tab.activeForeground" : "tab.inactiveForeground"
                                 )
                             )
-                            .frame(width: 26, height: 26)
+                            .frame(width: 22, height: 22)
                     }
-
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                 .hoverEffect(.highlight)
                 .onTapGesture {
                     onCloseEditor()
                 }
-
             }
-            .frame(height: 40)
+            .frame(minWidth: 110, maxWidth: 220, minHeight: 40, maxHeight: 40)
             .padding(.horizontal, 8)
-            .if(isActive) {
-                $0.background(Color(id: "tab.activeBackground"))
+            .background(
+                isActive
+                    ? Color(id: "tab.activeBackground")
+                    : Color.clear
+            )
+            .overlay(alignment: .bottom) {
+                if isActive {
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(height: 2)
+                }
             }
-            .cornerRadius(10, corners: [.topLeft, .topRight])
+            .cornerRadius(9, corners: [.topLeft, .topRight])
         }
         .contextMenu {
             Button {
@@ -127,6 +149,18 @@ struct EditorTab: View {
                     App.closeEditorsToRight(of: currentEditor)
                 } label: {
                     Label("Close to the Right", systemImage: "arrow.right.to.line")
+                }
+            }
+
+            if editorURL != nil {
+                Divider()
+
+                Button(action: copyRelativePath) {
+                    Label("Copy Relative Path", systemImage: "doc.on.doc")
+                }
+
+                Button(action: openInFilesApp) {
+                    Label("Show in Files App", systemImage: "folder")
                 }
             }
 
