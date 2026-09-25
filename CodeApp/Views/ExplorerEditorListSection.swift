@@ -132,6 +132,39 @@ private struct EditorCell: View {
                         Text("Delete")
                         Image(systemName: "trash")
                     })
+
+                Divider()
+            }
+
+            Button {
+                App.closeEditor(editor: editor)
+            } label: {
+                Label("Close", systemImage: "xmark")
+            }
+
+            if App.editors.count > 1 {
+                Button {
+                    App.closeOtherEditors(keeping: editor)
+                } label: {
+                    Label("Close Others", systemImage: "xmark.circle")
+                }
+            }
+
+            if !App.editorsToRight(of: editor).isEmpty {
+                Button {
+                    App.closeEditorsToRight(of: editor)
+                } label: {
+                    Label("Close to the Right", systemImage: "arrow.right.to.line")
+                }
+            }
+
+            if !App.editors.isEmpty {
+                Divider()
+                Button(role: .destructive) {
+                    App.closeEditorsRespectingUnsaved(App.editors)
+                } label: {
+                    Label("Close All", systemImage: "xmark.rectangle.stack")
+                }
             }
         }
     }

@@ -8,6 +8,67 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+extension MainApp {
+    /// Bulk tab actions deliberately refuse to discard modified editors.
+    /// Single-tab close still uses `closeEditor`, which already presents the save prompt.
+    @MainActor
+    func closeEditorsRespectingUnsaved(
+        _ candidates: [EditorInstance],
+        preserving preservedEditor: EditorInstance? = nil
+    ) {
+        let candidateIDs = Set(candidates.map(\.id))
+        let targets = editors.filter { candidateIDs.contains($0.id) }
+        guard !targets.isEmpty else { return }
+
+        let unsavedEditors = targets.compactMap { $0 as? TextEditorInstance }.filter { !$0.isSaved }
+        guard unsavedEditors.isEmpty else {
+            alertManager.showAlert(
+                title: "Unsaved Changes",
+                message: "Save or close modified files before using a bulk tab action.",
+                content: AnyView(
+                    Button("OK", role: .cancel) {}
+                )
+            )
+            return
+        }
+
+        for editor in targets {
+            if editors.contains(where: { $0.id == editor.id }) {
+                closeEditor(editor: editor, force: true)
+            }
+        }
+
+        if let preservedEditor,
+            editors.contains(where: { $0.id == preservedEditor.id })
+        {
+            setActiveEditor(editor: preservedEditor)
+        }
+    }
+
+    @MainActor
+    func closeOtherEditors(keeping editor: EditorInstance) {
+        closeEditorsRespectingUnsaved(
+            editors.filter { $0.id != editor.id },
+            preserving: editor
+        )
+    }
+
+    @MainActor
+    func closeEditorsToRight(of editor: EditorInstance) {
+        guard let index = editors.firstIndex(where: { $0.id == editor.id }) else { return }
+        let nextIndex = editors.index(after: index)
+        guard nextIndex < editors.endIndex else { return }
+        closeEditorsRespectingUnsaved(Array(editors[nextIndex...]), preserving: editor)
+    }
+
+    func editorsToRight(of editor: EditorInstance) -> [EditorInstance] {
+        guard let index = editors.firstIndex(where: { $0.id == editor.id }) else { return [] }
+        let nextIndex = editors.index(after: index)
+        guard nextIndex < editors.endIndex else { return [] }
+        return Array(editors[nextIndex...])
+    }
+}
+
 struct CompactEditorTabs: View {
     @EnvironmentObject var App: MainApp
 
@@ -21,6 +82,30 @@ struct CompactEditorTabs: View {
                         App.closeEditor(editor: activeEditor)
                     } label: {
                         Label("Close Editor", systemImage: "xmark")
+                    }
+                }
+
+                if App.editors.count > 1 {
+                    Section("Tab Actions") {
+                        Button {
+                            App.closeOtherEditors(keeping: activeEditor)
+                        } label: {
+                            Label("Close Others", systemImage: "xmark.circle")
+                        }
+
+                        if !App.editorsToRight(of: activeEditor).isEmpty {
+                            Button {
+                                App.closeEditorsToRight(of: activeEditor)
+                            } label: {
+                                Label("Close to the Right", systemImage: "arrow.right.to.line")
+                            }
+                        }
+
+                        Button(role: .destructive) {
+                            App.closeEditorsRespectingUnsaved(App.editors)
+                        } label: {
+                            Label("Close All", systemImage: "xmark.rectangle.stack")
+                        }
                     }
                 }
             }
@@ -85,13 +170,6 @@ struct EditorTabs: View {
             self.current = nil
             return true
         }
-    }
-
-    private func keyForInt(int: Int) -> KeyEquivalent {
-        if int < 10 {
-            return KeyEquivalent.init(String(int).first!)
-        }
-        return KeyEquivalent.init("0")
     }
 
     var body: some View {

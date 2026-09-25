@@ -52,13 +52,27 @@ private struct PanelTabLabel: View {
 }
 
 private struct PanelTabs: View {
+    @EnvironmentObject var App: MainApp
     @EnvironmentObject var panelManager: PanelManager
+
+    private var problemCount: Int {
+        App.problems.values.reduce(0) { $0 + $1.count }
+    }
 
     var body: some View {
         ForEach(panelManager.panels, id: \.labelId) { panel in
             PanelTabLabel(panel: panel)
 
-            if let bubbleCount = panelManager.bubbleCount[panel.labelId] {
+            if panel.labelId == "PROBLEMS", problemCount > 0 {
+                Circle()
+                    .fill(Color.init(id: "panel.border"))
+                    .frame(width: 14, height: 14)
+                    .overlay(
+                        Text("\(problemCount)")
+                            .foregroundColor(Color.init(id: "panelTitle.activeForeground"))
+                            .font(.system(size: 10))
+                    )
+            } else if let bubbleCount = panelManager.bubbleCount[panel.labelId] {
                 Circle()
                     .fill(Color.init(id: "panel.border"))
                     .frame(width: 14, height: 14)
@@ -71,6 +85,101 @@ private struct PanelTabs: View {
         }
     }
 
+}
+
+private struct ProblemsPanelView: View {
+    @EnvironmentObject var App: MainApp
+
+    private var sortedURLs: [URL] {
+        App.problems.keys.sorted {
+            $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent)
+                == .orderedAscending
+        }
+    }
+
+    private func iconName(for severity: Int) -> String {
+        switch severity {
+        case 8:
+            return "xmark.circle.fill"
+        case 4:
+            return "exclamationmark.triangle.fill"
+        case 2:
+            return "info.circle.fill"
+        default:
+            return "lightbulb.fill"
+        }
+    }
+
+    private func open(_ marker: MonacoEditorMarker, in url: URL) {
+        Task { @MainActor in
+            do {
+                _ = try await App.openFile(url: url, alwaysInNewTab: true)
+                await App.monacoInstance.scrollToLine(line: marker.startLineNumber)
+                await App.monacoInstance.focus()
+            } catch {
+                App.notificationManager.showErrorMessage(error.localizedDescription)
+            }
+        }
+    }
+
+    var body: some View {
+        if App.problems.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 24))
+                Text("No problems detected in the current workspace.")
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(sortedURLs, id: \.self) { url in
+                        if let markers = App.problems[url], !markers.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    FileIcon(url: url.lastPathComponent, iconSize: 12)
+                                    Text(url.lastPathComponent)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .lineLimit(1)
+                                    Text("\(markers.count)")
+                                        .foregroundColor(.secondary)
+                                }
+
+                                ForEach(markers) { marker in
+                                    Button {
+                                        open(marker, in: url)
+                                    } label: {
+                                        HStack(alignment: .top, spacing: 8) {
+                                            Image(systemName: iconName(for: marker.severity))
+                                                .frame(width: 14)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(marker.message)
+                                                    .multilineTextAlignment(.leading)
+                                                    .lineLimit(2)
+                                                Text(
+                                                    "Line \(marker.startLineNumber), Column \(marker.startColumn) · \(marker.owner)"
+                                                )
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.secondary)
+                                            }
+                                            Spacer(minLength: 0)
+                                        }
+                                        .contentShape(Rectangle())
+                                        .padding(.vertical, 2)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.bottom, 4)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
+            }
+        }
+    }
 }
 
 private struct Implementation: View {
@@ -121,6 +230,7 @@ private struct Implementation: View {
 struct PanelView: View {
 
     @EnvironmentObject var App: MainApp
+    @EnvironmentObject var panelManager: PanelManager
 
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
@@ -151,31 +261,49 @@ struct PanelView: View {
         }
     }
 
+    private func registerProblemsPanelIfNeeded() {
+        guard !panelManager.panels.contains(where: { $0.labelId == "PROBLEMS" }) else {
+            return
+        }
+        panelManager.registerPanel(
+            panel: Panel(
+                labelId: "PROBLEMS",
+                mainView: AnyView(ProblemsPanelView()),
+                toolBarView: nil
+            )
+        )
+    }
+
     var body: some View {
-        if #available(iOS 26.0, *) {
-            Implementation()
-                .frame(height: min(CGFloat(panelHeight), maxHeight))
-                .background(Color.init(id: "editor.background"))
-                .gesture(
-                    DragGesture(minimumDistance: 10.0, coordinateSpace: .global)
-                        .updating($translation) { value, gestureState, transaction in
-                            let proposedNewHeight =
-                                panelHeight - value.translation.height + (translation ?? 0)
-                            evaluateProposedHeight(proposal: proposedNewHeight)
-                            gestureState = value.translation.height
-                        }
-                )
-        } else {
-            Implementation()
-                .frame(height: min(CGFloat(panelHeight), maxHeight))
-                .background(Color.init(id: "editor.background"))
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            let proposedNewHeight = panelHeight - value.translation.height
-                            evaluateProposedHeight(proposal: proposedNewHeight)
-                        }
-                )
+        Group {
+            if #available(iOS 26.0, *) {
+                Implementation()
+                    .frame(height: min(CGFloat(panelHeight), maxHeight))
+                    .background(Color.init(id: "editor.background"))
+                    .gesture(
+                        DragGesture(minimumDistance: 10.0, coordinateSpace: .global)
+                            .updating($translation) { value, gestureState, transaction in
+                                let proposedNewHeight =
+                                    panelHeight - value.translation.height + (translation ?? 0)
+                                evaluateProposedHeight(proposal: proposedNewHeight)
+                                gestureState = value.translation.height
+                            }
+                    )
+            } else {
+                Implementation()
+                    .frame(height: min(CGFloat(panelHeight), maxHeight))
+                    .background(Color.init(id: "editor.background"))
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                let proposedNewHeight = panelHeight - value.translation.height
+                                evaluateProposedHeight(proposal: proposedNewHeight)
+                            }
+                    )
+            }
+        }
+        .onAppear {
+            registerProblemsPanelIfNeeded()
         }
     }
 }
