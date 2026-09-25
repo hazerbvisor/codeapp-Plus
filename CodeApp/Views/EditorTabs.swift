@@ -121,20 +121,31 @@ struct CompactEditorTabs: View {
                 }
             }
         } label: {
-            HStack {
+            HStack(spacing: 6) {
+                FileIcon(url: App.activeEditor?.title ?? "", iconSize: 12)
                 Text(App.activeEditor?.title ?? "")
-                    .bold()
+                    .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                     .foregroundColor(Color.init("T1"))
 
-                if App.editors.count > 0 {
-                    Image(systemName: "chevron.down.circle.fill")
-                        .symbolRenderingMode(.hierarchical)
+                if !App.editors.isEmpty {
+                    Text("\(App.editors.count)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.secondary.opacity(0.14))
+                        )
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
                 }
             }
         }
-        .id(UUID())
-
+        .id(App.activeEditor?.id)
     }
 }
 
@@ -173,26 +184,42 @@ struct EditorTabs: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(App.editors) { currentEditor in
-                EditorTab(
-                    currentEditor: currentEditor,
-                    isActive: (App.activeEditor == currentEditor),
-                    onOpenEditor: {
-                        App.setActiveEditor(editor: currentEditor)
-                    },
-                    onCloseEditor: {
-                        App.closeEditor(editor: currentEditor)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(App.editors) { currentEditor in
+                        EditorTab(
+                            currentEditor: currentEditor,
+                            isActive: (App.activeEditor == currentEditor),
+                            onOpenEditor: {
+                                App.setActiveEditor(editor: currentEditor)
+                            },
+                            onCloseEditor: {
+                                App.closeEditor(editor: currentEditor)
+                            }
+                        )
+                        .id(currentEditor.id)
+                        .onDrag {
+                            self.dragging = currentEditor
+                            return NSItemProvider(object: currentEditor.id.uuidString as NSString)
+                        }
+                        .onDrop(
+                            of: [UTType.text],
+                            delegate: DragRelocateDelegate(
+                                item: currentEditor, listData: $App.editors, current: $dragging))
                     }
-                )
-                .onDrag {
-                    self.dragging = currentEditor
-                    return NSItemProvider(object: currentEditor.id.uuidString as NSString)
                 }
-                .onDrop(
-                    of: [UTType.text],
-                    delegate: DragRelocateDelegate(
-                        item: currentEditor, listData: $App.editors, current: $dragging))
+            }
+            .onAppear {
+                if let activeID = App.activeEditor?.id {
+                    proxy.scrollTo(activeID, anchor: .center)
+                }
+            }
+            .onChange(of: App.activeEditor?.id) { activeID in
+                guard let activeID = activeID else { return }
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    proxy.scrollTo(activeID, anchor: .center)
+                }
             }
         }
     }
