@@ -95,7 +95,8 @@ workflows:
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload "$IPA_PATH"
 
           echo "Packaged: $IPA_PATH"
-          /usr/bin/unzip -l "$IPA_PATH" | head -n 40
+          /usr/bin/unzip -tq "$IPA_PATH"
+          /usr/bin/unzip -l "$IPA_PATH" | /usr/bin/sed -n '1,40p'
 
     artifacts:
       - build/codemagic/ipa/*.ipa
