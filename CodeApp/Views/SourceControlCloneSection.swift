@@ -11,6 +11,7 @@ struct SourceControlCloneSection: View {
 
     @EnvironmentObject var App: MainApp
     @State var gitURL: String = ""
+    @State private var showsManualClone: Bool = false
 
     let onClone: (String) async throws -> Void
     let onTapResult: (String) -> Void
@@ -18,7 +19,7 @@ struct SourceControlCloneSection: View {
     var body: some View {
         Section(
             header:
-                Text("Clone Repository")
+                Text("Repositories")
                 .foregroundColor(Color(id: "sideBarSectionHeader.foreground"))
         ) {
 
@@ -30,36 +31,46 @@ struct SourceControlCloneSection: View {
                 }.foregroundColor(.gray)
             }
 
-            HStack {
-                Image(systemName: "link")
-                    .foregroundColor(.gray)
-                    .font(.subheadline)
-
-                TextField(
-                    "URL (HTTPS/SSH)", text: $gitURL,
-                    onCommit: {
-                        Task {
-                            try await onClone(gitURL)
-                            await MainActor.run {
-                                gitURL = ""
-                            }
-                        }
-                    }
-                )
-                .textContentType(.URL)
-                .keyboardType(.URL)
-                .autocapitalization(.none)
-                .disableAutocorrection(true)
-
-                Spacer()
-
-            }.padding(7)
-                .background(Color.init(id: "input.background"))
-                .cornerRadius(10)
-
-            DescriptionText("Example: https://github.com/thebaselab/codeapp.git")
-
             GitHubSearchView(onClone: onClone, onTap: onTapResult)
+
+            DisclosureGroup("Clone by URL", isExpanded: $showsManualClone) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Image(systemName: "link")
+                            .foregroundColor(.gray)
+                            .font(.subheadline)
+
+                        TextField(
+                            "URL (HTTPS/SSH)", text: $gitURL,
+                            onCommit: {
+                                Task {
+                                    do {
+                                        try await onClone(gitURL)
+                                        await MainActor.run {
+                                            gitURL = ""
+                                        }
+                                    } catch {
+                                        App.notificationManager.showErrorMessage(error.localizedDescription)
+                                    }
+                                }
+                            }
+                        )
+                        .textContentType(.URL)
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+
+                        Spacer()
+
+                    }
+                    .padding(7)
+                    .background(Color.init(id: "input.background"))
+                    .cornerRadius(10)
+
+                    DescriptionText("Use this for Git servers or repositories not listed above.")
+                }
+                .padding(.top, 6)
+            }
         }
     }
 }
