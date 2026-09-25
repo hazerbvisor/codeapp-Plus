@@ -5,6 +5,7 @@
 //  Created by Ken Chung on 12/4/2022.
 //
 
+import Foundation
 import SwiftUI
 
 struct GitHubSearchView: View {
@@ -47,35 +48,45 @@ struct GitHubSearchView: View {
     }
 
     var body: some View {
-        Picker("Repository Source", selection: $mode) {
-            ForEach(RepositoryBrowserMode.allCases) { option in
-                Text(option.rawValue).tag(option)
+        Group {
+            Picker("Repository Source", selection: $mode) {
+                ForEach(RepositoryBrowserMode.allCases) { option in
+                    Text(option.rawValue).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            switch mode {
+            case .myRepos:
+                repositoryFilterField
+                authenticatedRepositoryState(
+                    repositories: visibleMyRepositories,
+                    emptyMessage: "No accessible repositories found."
+                )
+
+            case .publicRepos:
+                SearchBar(
+                    text: $App.searchManager.searchTerm,
+                    searchAction: { App.searchManager.search() },
+                    placeholder: "Search public GitHub repositories",
+                    cornerRadius: 10
+                )
+
+                ForEach(visiblePublicSearchResults, id: \.html_url) { item in
+                    GitHubSearchResultCell(item: item, onClone: onClone, onTap: onTap)
+                }
+                .listRowBackground(Color.init(id: "sideBar.background"))
+
+            case .privateRepos:
+                repositoryFilterField
+                authenticatedRepositoryState(
+                    repositories: visiblePrivateRepositories,
+                    emptyMessage: "No private repositories are available with the current GitHub token."
+                )
             }
         }
-        .pickerStyle(.segmented)
-
-        switch mode {
-        case .myRepos:
-            repositoryFilterField
-            authenticatedRepositoryState(repositories: visibleMyRepositories, emptyMessage: "No accessible repositories found.")
-
-        case .publicRepos:
-            SearchBar(
-                text: $App.searchManager.searchTerm,
-                searchAction: { App.searchManager.search() }, placeholder: "Search public GitHub repositories",
-                cornerRadius: 10)
-
-            ForEach(visiblePublicSearchResults, id: \.html_url) { item in
-                GitHubSearchResultCell(item: item, onClone: onClone, onTap: onTap)
-            }
-            .listRowBackground(Color.init(id: "sideBar.background"))
-
-        case .privateRepos:
-            repositoryFilterField
-            authenticatedRepositoryState(
-                repositories: visiblePrivateRepositories,
-                emptyMessage: "No private repositories are available with the current GitHub token."
-            )
+        .onAppear {
+            App.searchManager.loadMyRepositories()
         }
     }
 
@@ -221,11 +232,6 @@ struct GitHubSearchResultCell: View {
         .onTapGesture {
             onTap(item.html_url)
         }
-        .onAppear {
-            if AppNeedsRepositoryRefresh.shared.shouldRefresh {
-                // Intentionally empty: keeps cells lightweight. Repository refresh is handled by the parent view.
-            }
-        }
     }
 }
 
@@ -257,9 +263,4 @@ private struct CloneButton: View {
                 }
             }
     }
-}
-
-private final class AppNeedsRepositoryRefresh {
-    static let shared = AppNeedsRepositoryRefresh()
-    var shouldRefresh: Bool { false }
 }
