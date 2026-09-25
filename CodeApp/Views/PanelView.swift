@@ -35,19 +35,49 @@ private struct PanelTabLabel: View {
     let panel: Panel
     @SceneStorage("panel.focusedId") var currentPanelId: String = DefaultUIState.PANEL_FOCUSED_ID
 
+    private var isActive: Bool {
+        panel.labelId == currentPanelId
+    }
+
     var body: some View {
-        Text(LocalizedStringKey(panel.labelId))
-            .textCase(.uppercase)
-            .foregroundColor(
-                Color.init(
-                    id: panel.labelId == currentPanelId
-                        ? "panelTitle.activeForeground" : "panelTitle.inactiveForeground")
+        Button {
+            currentPanelId = panel.labelId
+        } label: {
+            Text(LocalizedStringKey(panel.labelId))
+                .textCase(.uppercase)
+                .foregroundColor(
+                    Color.init(
+                        id: isActive
+                            ? "panelTitle.activeForeground" : "panelTitle.inactiveForeground")
+                )
+                .font(.system(size: 11, weight: isActive ? .semibold : .medium))
+                .padding(.horizontal, 7)
+                .frame(height: 28)
+                .overlay(alignment: .bottom) {
+                    if isActive {
+                        Rectangle()
+                            .fill(Color.accentColor)
+                            .frame(height: 2)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct PanelCountBadge: View {
+    let count: Int
+
+    var body: some View {
+        Text(count > 999 ? "999+" : "\(count)")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundColor(Color.init(id: "panelTitle.activeForeground"))
+            .padding(.horizontal, 5)
+            .frame(minWidth: 18, minHeight: 16)
+            .background(
+                Capsule()
+                    .fill(Color.init(id: "panel.border"))
             )
-            .font(.system(size: 12, weight: .light))
-            .padding(.leading)
-            .onTapGesture {
-                currentPanelId = panel.labelId
-            }
     }
 }
 
@@ -61,39 +91,108 @@ private struct PanelTabs: View {
 
     var body: some View {
         ForEach(panelManager.panels, id: \.labelId) { panel in
-            PanelTabLabel(panel: panel)
+            HStack(spacing: 3) {
+                PanelTabLabel(panel: panel)
 
-            if panel.labelId == "PROBLEMS", problemCount > 0 {
-                Circle()
-                    .fill(Color.init(id: "panel.border"))
-                    .frame(width: 14, height: 14)
-                    .overlay(
-                        Text("\(problemCount)")
-                            .foregroundColor(Color.init(id: "panelTitle.activeForeground"))
-                            .font(.system(size: 10))
-                    )
-            } else if let bubbleCount = panelManager.bubbleCount[panel.labelId] {
-                Circle()
-                    .fill(Color.init(id: "panel.border"))
-                    .frame(width: 14, height: 14)
-                    .overlay(
-                        Text("\(bubbleCount)")
-                            .foregroundColor(Color.init(id: "panelTitle.activeForeground"))
-                            .font(.system(size: 10))
-                    )
+                if panel.labelId == "PROBLEMS", problemCount > 0 {
+                    PanelCountBadge(count: problemCount)
+                } else if let bubbleCount = panelManager.bubbleCount[panel.labelId] {
+                    PanelCountBadge(count: bubbleCount)
+                }
             }
         }
     }
+}
 
+private enum ProblemSeverityFilter: String, CaseIterable, Identifiable {
+    case all
+    case errors
+    case warnings
+    case info
+    case hints
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .errors: return "Errors"
+        case .warnings: return "Warnings"
+        case .info: return "Info"
+        case .hints: return "Hints"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all: return "line.3.horizontal.decrease.circle"
+        case .errors: return "xmark.circle.fill"
+        case .warnings: return "exclamationmark.triangle.fill"
+        case .info: return "info.circle.fill"
+        case .hints: return "lightbulb.fill"
+        }
+    }
+
+    var severity: Int? {
+        switch self {
+        case .all: return nil
+        case .errors: return 8
+        case .warnings: return 4
+        case .info: return 2
+        case .hints: return 1
+        }
+    }
 }
 
 private struct ProblemsPanelView: View {
     @EnvironmentObject var App: MainApp
 
+    @State private var searchText = ""
+    @State private var severityFilter: ProblemSeverityFilter = .all
+
     private var sortedURLs: [URL] {
         App.problems.keys.sorted {
             $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent)
                 == .orderedAscending
+        }
+    }
+
+    private var filteredURLs: [URL] {
+        sortedURLs.filter { !filteredMarkers(for: $0).isEmpty }
+    }
+
+    private var filteredProblemCount: Int {
+        filteredURLs.reduce(0) { $0 + filteredMarkers(for: $1).count }
+    }
+
+    private var isFiltering: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || severityFilter != .all
+    }
+
+    private func markerCount(for filter: ProblemSeverityFilter) -> Int {
+        App.problems.values.reduce(0) { partialResult, markers in
+            partialResult + markers.filter { marker in
+                guard let severity = filter.severity else { return true }
+                return marker.severity == severity
+            }.count
+        }
+    }
+
+    private func filteredMarkers(for url: URL) -> [MonacoEditorMarker] {
+        guard let markers = App.problems[url] else { return [] }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return markers.filter { marker in
+            if let severity = severityFilter.severity, marker.severity != severity {
+                return false
+            }
+
+            guard !query.isEmpty else { return true }
+            return marker.message.localizedCaseInsensitiveContains(query)
+                || marker.owner.localizedCaseInsensitiveContains(query)
+                || url.lastPathComponent.localizedCaseInsensitiveContains(query)
+                || url.path.localizedCaseInsensitiveContains(query)
         }
     }
 
@@ -110,6 +209,19 @@ private struct ProblemsPanelView: View {
         }
     }
 
+    private func iconColor(for severity: Int) -> Color {
+        switch severity {
+        case 8:
+            return .red
+        case 4:
+            return .orange
+        case 2:
+            return .blue
+        default:
+            return .secondary
+        }
+    }
+
     private func open(_ marker: MonacoEditorMarker, in url: URL) {
         Task { @MainActor in
             do {
@@ -123,26 +235,108 @@ private struct ProblemsPanelView: View {
     }
 
     var body: some View {
-        if App.problems.isEmpty {
-            VStack(spacing: 8) {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 24))
-                Text("No problems detected in the current workspace.")
-                    .foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Filter Problems", text: $searchText)
+                        .textFieldStyle(.plain)
+
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.secondary.opacity(0.08))
+                )
+
+                Menu {
+                    ForEach(ProblemSeverityFilter.allCases) { filter in
+                        Button {
+                            severityFilter = filter
+                        } label: {
+                            Label(
+                                "\(filter.title) (\(markerCount(for: filter)))",
+                                systemImage: filter.systemImage
+                            )
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: severityFilter.systemImage)
+                        Text(severityFilter.title)
+                        if isFiltering {
+                            Text("\(filteredProblemCount)")
+                                .font(.caption2.monospacedDigit())
+                        }
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(Color.init(id: "panel.border"), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(sortedURLs, id: \.self) { url in
-                        if let markers = App.problems[url], !markers.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
+            .padding(.vertical, 6)
+
+            Divider()
+
+            if App.problems.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 24))
+                    Text("No problems detected in the current workspace.")
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filteredURLs.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 22))
+                    Text("No problems match the current filter.")
+                        .foregroundColor(.secondary)
+                    Button("Clear Filters") {
+                        searchText = ""
+                        severityFilter = .all
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(filteredURLs, id: \.self) { url in
+                            let markers = filteredMarkers(for: url)
+
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack(spacing: 7) {
                                     FileIcon(url: url.lastPathComponent, iconSize: 12)
-                                    Text(url.lastPathComponent)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .lineLimit(1)
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text(url.lastPathComponent)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .lineLimit(1)
+                                        Text(url.deletingLastPathComponent().lastPathComponent)
+                                            .font(.system(size: 9))
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer(minLength: 6)
                                     Text("\(markers.count)")
+                                        .font(.caption2.monospacedDigit())
                                         .foregroundColor(.secondary)
                                 }
 
@@ -152,6 +346,7 @@ private struct ProblemsPanelView: View {
                                     } label: {
                                         HStack(alignment: .top, spacing: 8) {
                                             Image(systemName: iconName(for: marker.severity))
+                                                .foregroundColor(iconColor(for: marker.severity))
                                                 .frame(width: 14)
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(marker.message)
@@ -166,17 +361,17 @@ private struct ProblemsPanelView: View {
                                             Spacer(minLength: 0)
                                         }
                                         .contentShape(Rectangle())
-                                        .padding(.vertical, 2)
+                                        .padding(.vertical, 3)
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
-                            .padding(.bottom, 4)
+                            .padding(.bottom, 2)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
             }
         }
     }
@@ -193,24 +388,21 @@ private struct Implementation: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Rectangle()
-                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: 1)
-                    .foregroundColor(
-                        Color.init(id: "panel.border"))
-            }
+            Rectangle()
+                .frame(maxWidth: .infinity, maxHeight: 1)
+                .foregroundColor(Color.init(id: "panel.border"))
 
-            HStack {
+            HStack(spacing: 4) {
                 PanelTabs()
 
                 Spacer()
 
                 currentPanel?
                     .toolBarView
-                    .padding(.horizontal)
+                    .padding(.horizontal, 8)
                     .environmentObject(panelManager)
-
-            }.frame(height: 14).padding(.vertical, 5)
+            }
+            .frame(height: 28)
 
             HStack {
                 if let currentPanel = currentPanel {
@@ -219,12 +411,12 @@ private struct Implementation: View {
                 } else {
                     Text("Empty Panel")
                 }
-            }.frame(maxHeight: .infinity)
+            }
+            .frame(maxHeight: .infinity)
         }
         .foregroundColor(Color(id: "panelTitle.activeForeground"))
         .font(.system(size: 12, weight: .light))
     }
-
 }
 
 struct PanelView: View {
