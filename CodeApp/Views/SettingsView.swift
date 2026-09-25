@@ -294,8 +294,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    Section(header: Text(NSLocalizedString("About", comment: ""))) {
-
+                    Section {
                         NavigationLink(
                             destination: SimpleMarkDownView(
                                 text: NSLocalizedString("Changelog.message", comment: ""))
@@ -353,6 +352,8 @@ struct SettingsView: View {
                                         "All settings erased")
                                 }, secondaryButton: .cancel())
                         }
+                    } header: {
+                        Text(NSLocalizedString("About", comment: ""))
                     } footer: {
                         Text("CodeApp Plus is based on Code App by thebaselab. Original copyright and open-source license notices are preserved.")
                     }
