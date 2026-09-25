@@ -72,6 +72,23 @@ struct EditorView: View {
                                 isSideBarVisible = true
                             })
                     }
+
+                    Button("Previous Editor") {
+                        App.selectAdjacentEditor(offset: -1)
+                    }
+                    .keyboardShortcut("[", modifiers: [.command, .shift])
+
+                    Button("Next Editor") {
+                        App.selectAdjacentEditor(offset: 1)
+                    }
+                    .keyboardShortcut("]", modifiers: [.command, .shift])
+
+                    Button("Go to Line") {
+                        Task {
+                            await App.monacoInstance._toggleGoToLineWidget()
+                        }
+                    }
+                    .keyboardShortcut("g", modifiers: [.control])
                 }.foregroundColor(.clear).font(.system(size: 1))
 
                 Color.init(id: "editor.background")
