@@ -150,12 +150,26 @@ private struct EditorCell: View {
                 }
             }
 
+            if !App.editorsToLeft(of: editor).isEmpty {
+                Button {
+                    App.closeEditorsToLeft(of: editor)
+                } label: {
+                    Label("Close to the Left", systemImage: "arrow.left.to.line")
+                }
+            }
+
             if !App.editorsToRight(of: editor).isEmpty {
                 Button {
                     App.closeEditorsToRight(of: editor)
                 } label: {
                     Label("Close to the Right", systemImage: "arrow.right.to.line")
                 }
+            }
+
+            Button {
+                App.closeSavedEditors()
+            } label: {
+                Label("Close Saved", systemImage: "checkmark.rectangle.stack")
             }
 
             if !App.editors.isEmpty {

@@ -55,10 +55,36 @@ extension MainApp {
 
     @MainActor
     func closeEditorsToRight(of editor: EditorInstance) {
-        guard let index = editors.firstIndex(where: { $0.id == editor.id }) else { return }
-        let nextIndex = editors.index(after: index)
-        guard nextIndex < editors.endIndex else { return }
-        closeEditorsRespectingUnsaved(Array(editors[nextIndex...]), preserving: editor)
+        closeEditorsRespectingUnsaved(editorsToRight(of: editor), preserving: editor)
+    }
+
+    @MainActor
+    func closeEditorsToLeft(of editor: EditorInstance) {
+        closeEditorsRespectingUnsaved(editorsToLeft(of: editor), preserving: editor)
+    }
+
+    @MainActor
+    func closeSavedEditors() {
+        let savedEditors = editors.filter { editor in
+            guard let textEditor = editor as? TextEditorInstance else { return true }
+            return textEditor.isSaved
+        }
+        closeEditorsRespectingUnsaved(savedEditors)
+    }
+
+    @MainActor
+    func selectAdjacentEditor(offset: Int) {
+        guard !editors.isEmpty else { return }
+        guard let activeEditor,
+            let currentIndex = editors.firstIndex(where: { $0.id == activeEditor.id })
+        else {
+            setActiveEditor(editor: editors[0])
+            return
+        }
+
+        let count = editors.count
+        let nextIndex = (currentIndex + offset % count + count) % count
+        setActiveEditor(editor: editors[nextIndex])
     }
 
     func editorsToRight(of editor: EditorInstance) -> [EditorInstance] {
@@ -66,6 +92,12 @@ extension MainApp {
         let nextIndex = editors.index(after: index)
         guard nextIndex < editors.endIndex else { return [] }
         return Array(editors[nextIndex...])
+    }
+
+    func editorsToLeft(of editor: EditorInstance) -> [EditorInstance] {
+        guard let index = editors.firstIndex(where: { $0.id == editor.id }), index > editors.startIndex
+        else { return [] }
+        return Array(editors[..<index])
     }
 }
 
@@ -93,12 +125,26 @@ struct CompactEditorTabs: View {
                             Label("Close Others", systemImage: "xmark.circle")
                         }
 
+                        if !App.editorsToLeft(of: activeEditor).isEmpty {
+                            Button {
+                                App.closeEditorsToLeft(of: activeEditor)
+                            } label: {
+                                Label("Close to the Left", systemImage: "arrow.left.to.line")
+                            }
+                        }
+
                         if !App.editorsToRight(of: activeEditor).isEmpty {
                             Button {
                                 App.closeEditorsToRight(of: activeEditor)
                             } label: {
                                 Label("Close to the Right", systemImage: "arrow.right.to.line")
                             }
+                        }
+
+                        Button {
+                            App.closeSavedEditors()
+                        } label: {
+                            Label("Close Saved", systemImage: "checkmark.rectangle.stack")
                         }
 
                         Button(role: .destructive) {

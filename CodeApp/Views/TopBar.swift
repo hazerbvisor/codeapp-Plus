@@ -95,9 +95,36 @@ struct TopBar: View {
                         }
                     }
                 }
+
+                if !App.editors.isEmpty {
+                    Section("Editor Navigation") {
+                        Button {
+                            App.selectAdjacentEditor(offset: -1)
+                        } label: {
+                            Label("Previous Editor", systemImage: "chevron.left")
+                        }
+
+                        Button {
+                            App.selectAdjacentEditor(offset: 1)
+                        } label: {
+                            Label("Next Editor", systemImage: "chevron.right")
+                        }
+
+                        if App.activeTextEditor != nil && !App.runeStoneEditorEnabled {
+                            Button {
+                                Task {
+                                    await App.monacoInstance._toggleGoToLineWidget()
+                                }
+                            } label: {
+                                Label("Go to Line…", systemImage: "text.line.first.and.arrowtriangle.forward")
+                            }
+                        }
+                    }
+                }
+
                 Section {
                     Button(role: .destructive) {
-                        App.closeAllEditors()
+                        App.closeEditorsRespectingUnsaved(App.editors)
                     } label: {
                         Label("Close All", systemImage: "xmark")
                     }

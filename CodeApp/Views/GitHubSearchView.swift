@@ -5,6 +5,7 @@
 //  Created by Ken Chung on 12/4/2022.
 //
 
+import Foundation
 import SwiftUI
 
 struct GitHubSearchView: View {
@@ -14,15 +15,156 @@ struct GitHubSearchView: View {
     let onClone: (String) async throws -> Void
     let onTap: (String) -> Void
 
-    var body: some View {
-        SearchBar(
-            text: $App.searchManager.searchTerm,
-            searchAction: { App.searchManager.search() }, placeholder: "GitHub",
-            cornerRadius: 10)
+    @State private var mode: RepositoryBrowserMode = .myRepos
+    @State private var repositoryFilter: String = ""
 
-        ForEach(App.searchManager.searchResultItems, id: \.html_url) { item in
-            GitHubSearchResultCell(item: item, onClone: onClone, onTap: onTap)
-        }.listRowBackground(Color.init(id: "sideBar.background"))
+    private enum RepositoryBrowserMode: String, CaseIterable, Identifiable {
+        case myRepos = "My Repos"
+        case publicRepos = "Add Public"
+        case privateRepos = "Add Private"
+
+        var id: String { rawValue }
+    }
+
+    private func matchesFilter(_ item: GitHubSearchManager.item) -> Bool {
+        let trimmed = repositoryFilter.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        return item.name.localizedCaseInsensitiveContains(trimmed)
+            || item.full_name.localizedCaseInsensitiveContains(trimmed)
+            || item.owner.login.localizedCaseInsensitiveContains(trimmed)
+            || (item.description?.localizedCaseInsensitiveContains(trimmed) ?? false)
+    }
+
+    private var visibleMyRepositories: [GitHubSearchManager.item] {
+        App.searchManager.myRepositories.filter(matchesFilter)
+    }
+
+    private var visiblePrivateRepositories: [GitHubSearchManager.item] {
+        App.searchManager.myRepositories.filter { $0.isPrivate && matchesFilter($0) }
+    }
+
+    private var visiblePublicSearchResults: [GitHubSearchManager.item] {
+        App.searchManager.searchResultItems.filter { !$0.isPrivate }
+    }
+
+    var body: some View {
+        Group {
+            Picker("Repository Source", selection: $mode) {
+                ForEach(RepositoryBrowserMode.allCases) { option in
+                    Text(option.rawValue).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            switch mode {
+            case .myRepos:
+                repositoryFilterField
+                authenticatedRepositoryState(
+                    repositories: visibleMyRepositories,
+                    emptyMessage: "No accessible repositories found."
+                )
+
+            case .publicRepos:
+                SearchBar(
+                    text: $App.searchManager.searchTerm,
+                    searchAction: { App.searchManager.search() },
+                    placeholder: "Search public GitHub repositories",
+                    cornerRadius: 10
+                )
+
+                ForEach(visiblePublicSearchResults, id: \.html_url) { item in
+                    GitHubSearchResultCell(item: item, onClone: onClone, onTap: onTap)
+                }
+                .listRowBackground(Color.init(id: "sideBar.background"))
+
+            case .privateRepos:
+                repositoryFilterField
+                authenticatedRepositoryState(
+                    repositories: visiblePrivateRepositories,
+                    emptyMessage: "No private repositories are available with the current GitHub token."
+                )
+            }
+        }
+        .onAppear {
+            App.searchManager.loadMyRepositories()
+        }
+    }
+
+    private var repositoryFilterField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .foregroundColor(.secondary)
+            TextField("Filter repositories", text: $repositoryFilter)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+            if !repositoryFilter.isEmpty {
+                Button {
+                    repositoryFilter = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(7)
+        .background(Color.init(id: "input.background"))
+        .cornerRadius(10)
+    }
+
+    @ViewBuilder
+    private func authenticatedRepositoryState(
+        repositories: [GitHubSearchManager.item], emptyMessage: String
+    ) -> some View {
+        if App.searchManager.isLoadingMyRepositories {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Loading repositories…")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+        } else if !App.searchManager.myRepositoriesErrorMessage.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(
+                    App.searchManager.myRepositoriesErrorMessage,
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+
+                Button("Retry") {
+                    App.searchManager.loadMyRepositories(force: true)
+                }
+                .font(.system(size: 12, weight: .semibold))
+            }
+        } else if repositories.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(emptyMessage)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+
+                Button("Refresh Repositories") {
+                    App.searchManager.loadMyRepositories(force: true)
+                }
+                .font(.system(size: 12, weight: .semibold))
+            }
+        } else {
+            HStack {
+                DescriptionText("\(repositories.count) repositories")
+                Spacer()
+                Button {
+                    App.searchManager.loadMyRepositories(force: true)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+            }
+
+            ForEach(repositories, id: \.html_url) { item in
+                GitHubSearchResultCell(item: item, onClone: onClone, onTap: onTap)
+            }
+            .listRowBackground(Color.init(id: "sideBar.background"))
+        }
     }
 }
 
@@ -39,33 +181,27 @@ struct GitHubSearchResultCell: View {
                 RemoteImage(url: item.owner.avatar_url)
                     .frame(width: 20, height: 20)
                     .cornerRadius(5)
-                Text(item.owner.login)
-                    .font(.system(size: 12))
+                Text(item.full_name)
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color.init("T1"))
+                    .lineLimit(1)
 
                 Spacer()
 
-                Image(systemName: "hand.raised")
-                    .font(.system(.caption))
-                    .foregroundColor(.gray)
-                    .onTapGesture {
-                        let url = URL(
-                            string:
-                                "https://support.github.com/contact/report-abuse?category=report-abuse&report=other&report_type=unspecified"
-                        )!
-                        UIApplication.shared.open(url)
-                    }
+                Label(
+                    item.isPrivate ? "Private" : "Public",
+                    systemImage: item.isPrivate ? "lock.fill" : "globe"
+                )
+                .labelStyle(.titleAndIcon)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.secondary)
             }
 
-            Text(item.name)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(Color.init("T1"))
-
-            if item.description != nil {
-                Text(item.description!)
+            if let description = item.description, !description.isEmpty {
+                Text(description)
                     .font(.subheadline)
                     .foregroundColor(Color.init("T1"))
+                    .lineLimit(2)
             }
 
             HStack {
@@ -83,11 +219,17 @@ struct GitHubSearchResultCell: View {
                     DescriptionText("\(humanReadableByteCount(bytes: item.size*1024))")
                 }
 
+                if item.fork {
+                    DescriptionText("• Fork")
+                }
+
                 Spacer()
 
                 CloneButton(item: item, onClone: onClone)
             }
-        }.onTapGesture {
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
             onTap(item.html_url)
         }
     }
@@ -113,9 +255,12 @@ private struct CloneButton: View {
             .cornerRadius(10)
             .onTapGesture {
                 Task {
-                    try await onClone(item.clone_url)
+                    do {
+                        try await onClone(item.clone_url)
+                    } catch {
+                        App.notificationManager.showErrorMessage(error.localizedDescription)
+                    }
                 }
             }
-
     }
 }
