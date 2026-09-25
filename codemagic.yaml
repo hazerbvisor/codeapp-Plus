@@ -1,0 +1,104 @@
+workflows:
+  codeapp-plus-unsigned:
+    name: CodeApp Plus - Unsigned IPA
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "Code.xcodeproj"
+        XCODE_SCHEME: "Code App"
+        BUILD_CONFIGURATION: "Release"
+
+    cache:
+      cache_paths:
+        - $CM_BUILD_DIR/Resources/.downloads
+        - $CM_BUILD_DIR/SourcePackages
+        - $HOME/Library/Developer/Xcode/DerivedData/CompilationCache.noindex
+
+    scripts:
+      - name: Show build environment
+        script: |
+          set -euo pipefail
+          xcodebuild -version
+          sw_vers
+          echo "Project: $XCODE_PROJECT"
+          echo "Scheme: $XCODE_SCHEME"
+          echo "Configuration: $BUILD_CONFIGURATION"
+
+      - name: Download runtime frameworks
+        script: |
+          set -euo pipefail
+          chmod +x ./downloadFrameworks.sh ./checkBuildInputs.sh
+          ./downloadFrameworks.sh
+
+      - name: Verify build inputs
+        script: |
+          set -euo pipefail
+          ./checkBuildInputs.sh
+
+      - name: Resolve Swift packages
+        script: |
+          set -euo pipefail
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/SourcePackages"
+
+      - name: Build unsigned iOS app
+        script: |
+          set -euo pipefail
+
+          BUILD_ROOT="$CM_BUILD_DIR/build/codemagic"
+          DERIVED_DATA="$BUILD_ROOT/DerivedData"
+          mkdir -p "$BUILD_ROOT"
+
+          set -o pipefail
+          xcodebuild \
+            -project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration "$BUILD_CONFIGURATION" \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/SourcePackages" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            COMPILATION_CACHE_ENABLE_CACHING=True \
+            build 2>&1 | tee "$BUILD_ROOT/xcodebuild.log"
+
+      - name: Package unsigned IPA
+        script: |
+          set -euo pipefail
+
+          BUILD_ROOT="$CM_BUILD_DIR/build/codemagic"
+          PRODUCTS_DIR="$BUILD_ROOT/DerivedData/Build/Products/${BUILD_CONFIGURATION}-iphoneos"
+          APP_PATH="$(find "$PRODUCTS_DIR" -maxdepth 1 -type d -name '*.app' -print -quit)"
+
+          if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
+            echo "No .app bundle found in $PRODUCTS_DIR" >&2
+            find "$BUILD_ROOT/DerivedData/Build/Products" -maxdepth 3 -print || true
+            exit 1
+          fi
+
+          IPA_DIR="$BUILD_ROOT/ipa"
+          STAGING_DIR="$IPA_DIR/staging"
+          IPA_PATH="$IPA_DIR/CodeApp-Plus-unsigned.ipa"
+
+          rm -rf "$IPA_DIR"
+          mkdir -p "$STAGING_DIR/Payload"
+          cp -R "$APP_PATH" "$STAGING_DIR/Payload/"
+
+          cd "$STAGING_DIR"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload "$IPA_PATH"
+
+          echo "Packaged: $IPA_PATH"
+          /usr/bin/unzip -l "$IPA_PATH" | head -n 40
+
+    artifacts:
+      - build/codemagic/ipa/*.ipa
+      - build/codemagic/xcodebuild.log
+      - build/codemagic/DerivedData/Build/Products/Release-iphoneos/*.app
+      - build/codemagic/DerivedData/Build/Products/Release-iphoneos/*.dSYM
