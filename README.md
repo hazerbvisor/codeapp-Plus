@@ -44,8 +44,24 @@ xcodebuild -project Code.xcodeproj -scheme 'Code App' -configuration Debug \
 The framework downloader retains archives under the ignored `Resources/.downloads`
 directory so interrupted runs can be resumed without discarding earlier downloads.
 `checkBuildInputs.sh` reports absent framework files; it does not compile the app.
-This repository currently has an Xcode project, not an XTool Mobile build
-configuration. Building directly on iPad requires a separate XTool integration.
+### XTool Mobile on iPad
+
+The root `xtool-mobile.json` declares the Code app's Swift/Objective-C source
+paths, supported bundled files, Apple frameworks, and a plist without Xcode's
+`$(BUILD_SETTING)` placeholders. Open the repository folder in XTool Mobile to
+read the manifest. Run `./downloadFrameworks.sh` and `./checkBuildInputs.sh`
+in an environment with Bash, curl, and unzip before transferring the complete
+project to iPad; XTool does not run the download script when importing it.
+
+This is an initial build graph, **not a verified working IPA build**. Code App
+also uses external Swift packages (including SwiftGit2, Clibgit2, Runestone,
+and many TreeSitter modules) and binary XCFrameworks. XTool does not resolve
+arbitrary Xcode/SwiftPM dependency graphs on-device. These dependencies must be
+prepared or declared explicitly before the app can compile and link. The
+NodeExtension target and Xcode-compiled asset catalogs, icon, and storyboard
+are also not represented in this first manifest. The XTool build log's first
+compiler error is the next dependency to address; do not treat a valid JSON
+manifest as proof that the app builds.
 
 The source code of the built-in languages are hosted on these repositories.
 | Language | Repository |
