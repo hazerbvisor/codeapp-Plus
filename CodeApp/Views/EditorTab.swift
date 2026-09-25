@@ -144,12 +144,26 @@ struct EditorTab: View {
                 }
             }
 
+            if !App.editorsToLeft(of: currentEditor).isEmpty {
+                Button {
+                    App.closeEditorsToLeft(of: currentEditor)
+                } label: {
+                    Label("Close to the Left", systemImage: "arrow.left.to.line")
+                }
+            }
+
             if !App.editorsToRight(of: currentEditor).isEmpty {
                 Button {
                     App.closeEditorsToRight(of: currentEditor)
                 } label: {
                     Label("Close to the Right", systemImage: "arrow.right.to.line")
                 }
+            }
+
+            Button {
+                App.closeSavedEditors()
+            } label: {
+                Label("Close Saved", systemImage: "checkmark.rectangle.stack")
             }
 
             if editorURL != nil {
