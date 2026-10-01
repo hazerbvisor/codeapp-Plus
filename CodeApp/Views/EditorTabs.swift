@@ -160,16 +160,19 @@ struct EditorTabs: View {
         @Binding var current: EditorInstance?
 
         func dropEntered(info: DropInfo) {
-            if item != current, current != nil {
-                let from = listData.firstIndex(of: current!)!
-                let to = listData.firstIndex(of: item)!
-                if listData[to].id != current!.id {
-                    withAnimation {
-                        listData.move(
-                            fromOffsets: IndexSet(integer: from),
-                            toOffset: to > from ? to + 1 : to)
-                    }
-                }
+            guard let current,
+                item != current,
+                let from = listData.firstIndex(of: current),
+                let to = listData.firstIndex(of: item)
+            else {
+                return
+            }
+
+            guard listData[to].id != current.id else { return }
+            withAnimation {
+                listData.move(
+                    fromOffsets: IndexSet(integer: from),
+                    toOffset: to > from ? to + 1 : to)
             }
         }
 
